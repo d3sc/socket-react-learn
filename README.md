@@ -3,7 +3,7 @@
 i made this repo for learn about implement of Socket io.
 
 ## Installation
-Install dependencies [(See below)](#dependencies-1)
+Install dependencies [(See below)](#dependencies)
 
 ### Server Folder
 
@@ -35,7 +35,7 @@ Start the local development server, in server folder
     pnpm dev
 
 
-## Depedencies
+## Dependencies
 
 - pnpm
 - nodejs
