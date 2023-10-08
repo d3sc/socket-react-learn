@@ -1,58 +1,44 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 import io from "socket.io-client";
+import Chat from "./Components/Chat";
 
 const socket = io.connect("http://localhost:3001");
 
 function App() {
-  //! Kesimpulan :
-  //* socket.emit() digunakan untuk mengirim signal/emit yang nantinya akan ditangkap oleh socket.on().
-  //* socket.on() digunakan untuk menangkap signal/emit yang telah dikirim oleh socket.emit()
-
-  // Room State
+  const [username, setUsername] = useState("");
   const [room, setRoom] = useState("");
-  const [codeRoom, setCodeRoom] = useState("");
-
-  // Message State
-  const [message, setMessage] = useState("");
-  const [messageReceive, setMessageReceive] = useState("");
+  const [showChat, setShowChat] = useState(false);
+  const [user, setUser] = useState(0);
 
   const joinRoom = () => {
-    if (room !== "") {
-      return socket.emit("join_room", { room });
+    if (username !== "" && room !== "" && username !== "admin") {
+      setShowChat(true);
+      if (username == "makanbakso") setUsername("admin");
+      return socket.emit("join_room", room);
     }
-    alert("code room tidak boleh kosong!");
-  };
-
-  const sendMessage = () => {
-    // codeRoom didapatkan ketika user sudah menekan tombol join room.
-    if (codeRoom !== "") {
-      // emit digunakan untuk membuat event, yang nanti nya akan di listen/di tangkap di server.
-      return socket.emit("send_message", { message, codeRoom });
-    }
-    alert("masukan code room!");
+    alert("error!");
   };
 
   useEffect(() => {
-    socket.on("receive_message", (data) => {
-      setMessageReceive(data.message);
-    });
-
-    // menangkap emit code_room
-    socket.on("code_room", (data) => {
-      // membuat code room
-      setCodeRoom(data);
+    socket.on("users", (data) => {
+      setUser(data);
     });
   }, [socket]);
   return (
-    <div className="app">
-      <input type="text" placeholder="Code Room" onChange={(event) => setRoom(event.target.value)} />
-      <button onClick={joinRoom}>join room</button>
-      <input type="text" placeholder="Message.." onChange={(event) => setMessage(event.target.value)} />
-      <button onClick={sendMessage}>Send Message</button>
-      <h1>Code Room: {codeRoom}</h1>
-      <h1>Message:</h1>
-      {messageReceive}
+    <div className="App">
+      {!showChat ? (
+        <div className="joinChatContainer">
+          <h3>Join A Chat</h3>
+          <p>{user} users online!</p>
+          <p>Global room ID = global</p>
+          <input type="text" placeholder="John.." onChange={(e) => setUsername(e.target.value)} />
+          <input type="text" placeholder="Room ID.." onChange={(e) => setRoom(e.target.value)} />
+          <button onClick={joinRoom}>Join A Room</button>
+        </div>
+      ) : (
+        <Chat socket={socket} username={username} room={room} user={user} />
+      )}
     </div>
   );
 }

@@ -1,14 +1,15 @@
-const app = require("express")();
+const express = require("express");
 const http = require("http");
-const { Server } = require("socket.io");
 const cors = require("cors");
+const app = express();
+const { Server } = require("socket.io");
+const mongoose = require("mongoose");
+const RoomModels = require("./models/Room");
+require("dotenv").config();
 
 app.use(cors());
-
-// menggunakan http, karena jika kita menggunakan web socket, katanya harus menggunakan http server, walaupun udh pake express
 const server = http.createServer(app);
 
-// setting server
 const io = new Server(server, {
   cors: {
     origin: "http://localhost:5173",
@@ -16,34 +17,80 @@ const io = new Server(server, {
   },
 });
 
-//* kita harus menambahkan io.on("connection"), artinya pada saat user membuka website maka akan menjalankan callback
-// dengan kata lain pada saat user membuka website, maka akan langsung menjalankan function callback
+(async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URL);
+    console.log("mongodb connected!");
+  } catch (err) {
+    console.log(err);
+  }
+})();
+
+app.get("/", (req, res) => {
+  return res.json({ status: "OK!" });
+});
+
+let users = [];
+
 io.on("connection", (socket) => {
-  //* jika ada emit yang dikirim, maka akan ditangkap oleh on, sesuai nama emit nya.
-  // harus menggunakan socket, bukan io.
-  // socket.on("send_message", (data) => {
-  //   // broadcast digunakan untuk mengirim ke semua orang, kecuali ke orang yang mengirim sendiri, dia ngak kena broadcast nya.
-  //   socket.broadcast.emit("receive_message", data);
-  // });
+  users.push(socket.id);
+  socket.on("join_room", async (data) => {
+    socket.join(data);
+    const findData = await RoomModels.find({}).where("room").equals(data).exec();
 
-  socket.on("join_room", (data) => {
-    // memasukkan client kedalam room yang nantinya akan bisa menerima/melihat pesan secara spesifik ketika sudah join ke room.
-    //* yang bisa melihat pesan hanya client yang sudah masuk kedalam room saja
-    socket.join(data.room);
-    // mengirim code_room sesuai data
-    socket.emit("code_room", data.room);
+    // kalau data sudah ada maka tampilkan.
+    if (findData.length > 0) {
+      // socket.to(data).emit("receive_message", findData[0]);
+      socket.emit("receive_message", findData[0]);
+    }
+
+    console.log(`User ID ${socket.id} joined room ${data}`);
   });
 
-  socket.on("send_message", (data) => {
-    // client akan mengirim pesan secara spesifik ke room yang ditentukan.
-    // yang bisa melihat pesan hanya client yang sudah masuk kedalam room saja
-    socket.to(data.codeRoom).emit("receive_message", data);
+  socket.on("send_message", async (data) => {
+    const findData = await RoomModels.find({}).where("room").equals(data.room).exec();
 
-    // membuat client melihat pesan yang dia kirim sendiri.
-    socket.emit("receive_message", data);
+    if (findData.length > 0) {
+      const dataMessage = {
+        author: data.author,
+        message: data.message,
+        time: data.time,
+      };
+      const newData = await RoomModels.updateOne(
+        {
+          room: data.room,
+        },
+        {
+          $push: {
+            message: dataMessage,
+          },
+        }
+      );
+      socket.to(data.room).emit("receive_message", newData);
+    } else {
+      const newData = await RoomModels.create({
+        room: data.room,
+        message: [
+          {
+            author: data.author,
+            message: data.message,
+            time: data.time,
+          },
+        ],
+      });
+      socket.to(data.room).emit("receive_message", newData);
+    }
+    // socket.to(data.room).emit("receive_message", data);
   });
+  socket.on("disconnect", () => {
+    users = users.filter((user) => user !== socket.id);
+    socket.broadcast.emit("users", users.length);
+    socket.emit("users", users.length);
+  });
+  socket.broadcast.emit("users", users.length);
+  socket.emit("users", users.length);
 });
 
 server.listen(3001, () => {
-  console.log("Server Is Running at " + 3001);
+  console.log("Server running on port 3001");
 });
